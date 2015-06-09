@@ -4,13 +4,13 @@ Open Publishing Build Design Memo
 0. Introduction
 ---------------
 
-1. Scope
+1. Overview
 --------
 
 A complete open publishing scenario consists of the following parts:
 
 1. Writer creates a GIT repository and does necessary setup to make it an open publishing repo.
-2. Writer authors a document (in markdown format) and adds it to his local GIT repo. 
+2. Writer authors a document (in markdown format) and adds it to his local GIT repo.
 3. Writer pushes his local GIT repo to remote.
 4. Open publishing picks up the GIT change and transforms the markdown file into output (in HTML format).
 5. Open publishing delivers the output HTML file to the MSDN web site.
@@ -18,6 +18,31 @@ A complete open publishing scenario consists of the following parts:
 7. Writer is able to view his document on MSDN web site.  
 
 Open publishing build is mainly involved in #1 (**Provisioning**), #4 (**Build**), and #6 (**Notification**).
+
+Here is a diagram of the overall architecture of build service.
+
+![overview](overview.png)
+
+And below is the workflow for provisioning and publishing scenario:
+
+Provisioning:
+
+1. Writer create a GIT repo.
+2. Writer calls build web service API to create an open publishing repository.
+3. Build service writes repo information in configuration DB and return success to user.
+
+Publishing:
+
+1. Writer commits a change to local GIT repo and push to remote.
+2. GIT server send webhook to build web service.
+3. Build web service calls dispatcher to dispatch build request.
+4. Dispatcher reads configuration DB and dispatch build request to build worker.
+5. Build worker pulls changes from GIT repo and read previous build output from storage to do an incremental build.
+6. Build worker saves build output and build report to storage.
+7. Build worker pushes build output to delivery service through delivery web service.
+8. Build worker sends notification to writer about completion of publish.
+9. (Alternative) Writer can also call build web service to query publish status.
+10. Writer sees his content on MSDN web site (through rendering service).
 
 2. Provisioning
 ---------------
@@ -255,8 +280,49 @@ If not, build will translate these operations to CRUD operations:
 
 ### 3.8 Scalability
 
+*// To be written*
+
 4. Notification
 ---------------
 
-5. Management Portal and API
+Publish is an asynchronized operation. It's triggered by GIT push, but it won't block push operation as publish may take a long time.
+So there has to be a way to notify user when publish is completed (or failed).
+
+The most basic notification functionality we will provide is publish status API.
+User can use the last commit hash to call publish status API to get the pulbish status (succeeded, failed, processing) and publish report.
+
+We can also consider to support query publish status using the following crtiteria:
+1. Branch
+2. Tag
+3. GIT Revision range (01234567..89abcdef)
+4. File path to query the status of a single file
+
+The same query functionality will also be available on management portal.
+
+Besides query API, we will also provide push functionality to let users be notified instead of polling:
+1. Email
+2. Webhook
+
+
+5. API and Management Portal
 ----------------------------
+
+As described in previous section, user will mainly interact with open publishing through GIT repo.
+For example, to publish, user just need to do a GIT push. To configure a center, user just update the configuration file in GIT repo.
+
+But there're still some operations that need to be done outside GIT repo, like provision a repo, and as described in previous section, query a build.
+
+All these operations can be done through open publishing API.
+
+Open publishing API will be mainly supports the following operations:
+
+1. Create a repo. Given a GIT repo url, creates a corresponding "repo" in open publishing.
+2. Configure center watchlist. Given an open publishing repo, add/remove centers to be watched by open publishing.
+3. Triggers a publish. Though a publish can be triggered by GIT push, there will be some cases that user wants to publish manually.
+This API provides this functionality. The input parameters could be:
+   - Branch
+   - Tag
+   - Commit hash
+4. Query publish status and get publish report, already described in previous section.
+
+Management portal is just a graphics interface that provides the same functionality as API.
