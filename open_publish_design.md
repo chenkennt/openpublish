@@ -53,12 +53,13 @@ Publishing:
 10. Writer sees his content on MSDN web site (through rendering service).
 
 
-2. Provisioning
+3. Provisioning
 ---------------
 
 The first step of open publishing is to create a GIT repository and connect it to open publishing so that any changes in this repo can be automatically published.
 
 This step is called provisioning, which mainly contains two parts:
+
 1. Git repository must be created following the schema defined by open publishing.
 2. User must specify the GIT repository and necessary configuration through management portal or API.
 
@@ -67,7 +68,7 @@ This step is called provisioning, which mainly contains two parts:
 > But there will always be some configuration that is considered as "expensive" and cannot be done by manipulating GIT repo.
 > These configuration need to be specified in #2.
 
-### 2.1 GIT Repository Layout
+### 3.1 GIT Repository Layout
 
 Under a GIT repository, there will be multiple docsets. A docset is a group of documents that share the same configuration like template, base url, etc.
 Each docset is a folder, under which there is a `docset.json` that defines the basic properties of a docset.
@@ -91,7 +92,7 @@ Here is a diagram that illustrates the structure of an open publishing GIT repo.
    \- d.md
 ```
 
-### 2.2 Connect GIT Repository with Open Publish
+### 3.2 Connect GIT Repository with Open Publish
 
 After a GIT repository is created, user must manually configure it to be monitored by open publishing.
 This can be done through open publishing management portal or API.
@@ -101,10 +102,10 @@ Docset creation is supposed to be a "heavy" operation so it need to be configure
 
 After this step, for all changes in a monitored docset, open publishing will automatically build it and publish the content to MSDN web site.
 
-3. Build
+4. Build
 --------
 
-### 3.1 Docset Schema and File Format
+### 4.1 Docset Schema and File Format
 
 A docset contains the following files:
 
@@ -127,7 +128,7 @@ Here is a diagram that illustrates the structure of a docset:
    \- favicon.png
 ```
 
-#### 3.1.1 Markdown File
+#### 4.1.1 Markdown File
 
 Open publishing supports [Github Flavored Markdown](https://help.github.com/articles/github-flavored-markdown/), which is a superset of standard [Markdown](http://daringfireball.net/projects/markdown/).
 Open publishing will also support additional extensions, like content include (more extensions to be added later).
@@ -146,7 +147,7 @@ toc_title: Get Started
 body of the content...
 ```
 
-#### 3.1.2 toc.md
+#### 4.1.2 toc.md
 
 `toc.md` is used to define the TOC (table of contents) structure of a docset.
 
@@ -177,7 +178,7 @@ TOC node can also be an external link (for example, `www.bing.com`).
 
 > `toc.md` cannot contain arbitrary markdown content. For example, you cannot have images in it. All content that are not headers will lead to build error.
 
-### 3.2 Work with GIT Branch
+### 4.2 Work with GIT Branch
 
 In open publishing, we use GIT branches to maintain different copies of the same content.
 Same topic in different branch will be published to different urls of rendering site.
@@ -187,7 +188,7 @@ This could be used in several scenarios:
 2. Private working branch. User can create his own branch to save files that is still under writing, and merge it to common branch when it's ready.
 Files in private branch can still be validated/previewed by open publishing.
 
-#### 3.2.1 Live Branch
+#### 4.2.1 Live Branch
 
 Among all branches, there should be only one branch that is exposed to external users, as other staging/working branches are only used by writers for internal testing.
 This branch is called "Live" branch. Live branch can be identified by a special branch name. Content in live branch will be published to the MSDN live site.
@@ -195,14 +196,14 @@ Content in other branches will still be published, but only in internal MSDN sit
 
 Live branch can also be used to store branch related configuration. For example, if we want to have a configuration about which branches will be published (other branches will only be validated, as publish may be an "expensive" operation), this configuration can be stored in live branch.
 
-#### 3.2.2 New Feature Dogfooding using Branches
+#### 4.2.2 New Feature Dogfooding using Branches
 
 It'll use a common case that user wants to try new features (like a new markdown extension) in his working branch while keep live branch using stable features.
 We're going to support this by allow user to specify the build toolset they want to use (in GIT repo).
 We'll release multiple versions of our build tool and let user to choose which one they want to use.
 After they test the feature in working branch, they can merge the content to live branch then live branch will also upgrade to use the new build tool.
 
-### 3.3 Monitor GIT Repository Changes
+### 4.3 Monitor GIT Repository Changes
 
 Open publishing will monitor changes in GIT repository and automatically build and publish changes. We'll leverage webhook provided by GIT server to get notified when there is an event happened on GIT repo.
 
@@ -221,41 +222,45 @@ For one repo, all changes will be built sequentially. There're two ways to build
 
 \#2 may be more efficient but #1 will be more accurate. For now we will use #1 to build changes.
 
-### 3.4 Transform Markdown Files
+### 4.4 Transform Markdown Files
 
 We'll use open source markdown library ([marked.js](https://github.com/chjj/marked) is a good candidate) to transform markdown files to HTML files. There will be additional to develop transformation for markdown extensions.
 
 Transform also includes other tasks, including:
+
 1. Validation, validate source files and generate validation report
 2. Generate TOC
 3. Process metadata
 4. Generate dependency information for incremental build
 
 The output of transform will be in a folder structure. There're a few benefits for using files as output:
+
 1. It can be run both locally or on build server, without taking additional dependencies like database.
 2. Build result can be easily xcopied for troubleshoting.
 3. It's easy to build version control on files for transaction control.
 
-### 3.5 Template
+### 4.5 Template
 
 *// Not clear for now*
 
-### 3.6 Incremental Build
+### 4.6 Incremental Build
 
 To increase publish system throughput and reduce publish response time, it's important to have an incremental build system.
 
 There're several common scenarios that can benefit from incremental build:
+
 1. User only modifies several files in a GIT repo, obviously there is no need to build the whole repo.
 2. User merges from branch A to branch B, there is no need to build branch B as branch A should be already built, so it just need to copy the build output from branch A to B
 3. User create a new branch B from branch A, similar to #2, only need to copy build result from branch A.
 
-#### 3.6.1 Top-down Approach
+#### 4.6.1 Top-down Approach
 
 Top-down approach is like traditional source code build, build scans all files in the repo to figure out which files needs rebuild.
 
 For each file, build system will maintain a commit hash of the last build result, which can be used to determine whether a file is changed since last build.
 
 For a source file, we'll check the following to determine whether the file needs rebuild:
+
 1. The commit hash of the file itself.
 2. If #1 differs, rebuild. Otherwise, a dependency information is maintained in last build output. Get the dependency information and check the commit hash for all dependencies.
 
@@ -264,7 +269,7 @@ For a source file, we'll check the following to determine whether the file needs
 >
 > `//output/<commit_hash>/a.html`
 
-#### 3.6.2 Bottom-up Approach
+#### 4.6.2 Bottom-up Approach
 
 Bottom-up approach is to first detect which files are changed, then find out all files affected by changed files and rebuild them.
 This will be more efficient for small changes in large repos as scaning a repo may still take a long time.
@@ -276,6 +281,7 @@ Then we need to figure out the files affected by changed files. To get this info
 The real implementation could be a combination of both approach, as bottom-up approach is more efficient but implementation may be error-prone. Top-down approach is less efficient but more accurate.
 
 The following GIT operations should be interpreted correctly to have an efficient incremental build (if not, the build output is still correct but performance may be affected):
+
 1. File rename
 2. GIT new branch
 3. GIT merge branch
@@ -283,11 +289,11 @@ The following GIT operations should be interpreted correctly to have an efficien
 > Since we don't another ID other than file path, we cannot get 100% accurate file rename information (GIT is not accurate on file rename).
 > But as rename on live is a corner scenario, we'll just not support it. Rename will be simply a delete + add on delivery service (for build, detecting file rename will just have performance benifit).
 
-#### 3.6.4 Diff TOC Change
+#### 4.6.3 Diff TOC Change
 
 *// Still pending on how TOC will be implemented at delivery service*
 
-### 3.7 Integrate with Delivery Service
+### 4.7 Integrate with Delivery Service
 
 Delivery service will provide REST API to push build output. When talking with delivery service, we will use path to uniquely identifies a file.
 As described in preview section, if path of a file changes, delivery service will treat it as a new file.
@@ -298,14 +304,15 @@ Delivery service also has the concept of branch for a repo, which maps to the GI
 
 As a result of incremental build, build will only push the changed documents to delivery service. If delivery service supports the following operation, build serivce can leverage them to improve publish performance.
 If not, build will translate these operations to CRUD operations:
+
 1. File rename
 2. Branch merge
 
-### 3.8 Scalability
+### 4.8 Scalability
 
 *// To be written*
 
-4. Notification
+5. Notification
 ---------------
 
 Publish is an asynchronized operation. It's triggered by GIT push, but it won't block push operation as publish may take a long time.
@@ -315,6 +322,7 @@ The most basic notification functionality we will provide is publish status API.
 User can use the last commit hash to call publish status API to get the pulbish status (succeeded, failed, processing) and publish report.
 
 We can also consider to support query publish status using the following criteria:
+
 1. Branch
 2. Tag
 3. GIT Revision range (01234567..89abcdef)
@@ -323,11 +331,12 @@ We can also consider to support query publish status using the following criteri
 The same query functionality will also be available on management portal.
 
 Besides query API, we will also provide push functionality to let users be notified instead of polling:
+
 1. Email
 2. Webhook
 
 
-5. API and Management Portal
+6. API and Management Portal
 ----------------------------
 
 As described in previous section, user will mainly interact with open publishing through GIT repo.
