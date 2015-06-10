@@ -51,7 +51,7 @@ Publishing:
 The first step of open publishing is to create a GIT repository and connect it to open publishing so that any changes in this repo can be automatically published.
 
 This step is called provisioning, which mainly contains two parts:
-1. Git repository must be created following the schema defined by open publishing.
+1. Git repository must be created following the schema defined by open publishing. (Hopefully the schema is tolarent enough, so we can handle more repos. For example if user doesn't specify a TOC, we can have a default one created; if there's any other file that we don't recognize, we should just ignore them, etc.)
 2. User must specify the GIT repository to be monitored by open publish through management portal or API.
 
 > The design principle here is to make GIT repository self-contained, which means all information including content, metadata and configuration can be stored in a central place.
@@ -60,27 +60,27 @@ This step is called provisioning, which mainly contains two parts:
 
 ### 2.1 GIT Repository Layout
 
-Under a GIT repository, there will be multiple centers. A center is a group of documents that share the same configuration like template, base url, etc.
-Each center is a folder, under which there is a `center.json` that defines the basic properties of a center.
+Under a GIT repository, there will be multiple DocSets. A DocSet is a group of documents that share the same configuration like template, base url, etc.
+Each center is a folder, under which there is a `docSet.json` that defines the basic properties of a DocSet.
 
-Under the root folder of a repository, there is a `siteCatalog.json` that defines all centers in this repo and some repo-level metadata.
+Under the root folder of a repository, there is a `siteCatalog.json` that defines all DocSets in this repo and some repo-level metadata.
 
-> The design principle is to put metadata at center level.
+> The design principle is to put metadata at DocSet level.
 > But because of the mapping between build and delivery service (one GIT repo maps to one repo in delivery service), there will be some metadata defined at repo level because they has to be defined at repo level in delivery service.
 
-> A center must be added to `siteCatalog.json` to be detected by open publishing.
+> A DocSet must be added to `siteCatalog.json` to be detected by open publishing.
 
 Here is a diagram that illustrates the structure of an open publishing GIT repo.
 
 ```
 /
 |- siteCatalog.json
-|- center1/
-|  |- center.json
+|- DocSet1/
+|  |- docSet.json
 |  |- a.md
 |  \- b.md
-\- center2/
-   |- center.json
+\- DocSet2/
+   |- docSet.json
    |- c.md
    \- d.md
 ```
@@ -90,27 +90,27 @@ Here is a diagram that illustrates the structure of an open publishing GIT repo.
 After a GIT repository is created, user must manually configure it to be monitored by open publishing.
 This can be done through open publishing management portal or API.
 
-Center must be added to the monitor list manually, open publishing won't monitor center creation/deletion and automatically provision them. Center creation is supposed to be a "heavy" operation so it need to be configured manually.
+DocSet must be added to the monitor list manually, open publishing won't monitor DocSet creation/deletion and automatically provision them. DocSet creation is supposed to be a "heavy" operation so it need to be configured manually. (I understand that a DocSet should be firstly created in management portal, but this also means we will update the siteCatalog for our user, which means duplicated information in portal and repository, is that what we need to do? I think if we don't want to monitor DocSet added by user to just siteCatalog file, we should remove the file from repository.)
 
-After this step, for all changes in a monitored center, open publishing will automatically build it and publish the content to MSDN web site.
+After this step, for all changes in a monitored DocSet, open publishing will automatically build it and publish the content to MSDN web site.
 
 3. Build
 --------
 
-### 3.1 Center Schema and File Format
+### 3.1 DocSet Schema and File Format
 
-A center contains the following files:
+A DocSet contains the following files:
 
-1. `center.json`, which defines the basic properties of a center
+1. `docSet.json`, which defines the basic properties of a docSet
 2. Document source files, currently we only support markdown file, but we're open to support more formats (e.g., HTML, ReST) in future
-3. `toc.md` that describes the TOC of the center.
+3. `toc.md` that describes the TOC of the DocSet.
 4. Support files, which are used by document source files, e.g., image, video, etc.
 
-Here is a diagram that illustrates the structure of a center:
+Here is a diagram that illustrates the structure of a DocSet:
 
 ```
-/center
-|- center.json
+/DocSet
+|- docSet.json
 |- toc.md
 |- docs/
 |  |- get-started.md
@@ -141,7 +141,7 @@ body of the content...
 
 #### 3.1.2 toc.md
 
-`toc.md` is used to define the TOC (table of contents) structure of a center.
+`toc.md` is used to define the TOC (table of contents) structure of a DocSet.
 
 We uses [headers](http://daringfireball.net/projects/markdown/syntax#header) to specify the level of toc. For example:
 
