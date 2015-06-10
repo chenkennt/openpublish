@@ -1,10 +1,7 @@
 Open Publishing Build Design Memo
 =================================
 
-0. Introduction
----------------
-
-1. Overview
+1. Scope
 --------
 
 A complete open publishing scenario consists of the following parts:
@@ -19,17 +16,28 @@ A complete open publishing scenario consists of the following parts:
 
 Open publishing build is mainly involved in #1 (**Provisioning**), #4 (**Build**), and #6 (**Notification**).
 
+2. Architecture Design
+----------------------
+
 Here is a diagram of the overall architecture of build service.
 
 ![overview](overview.png)
 
-And below is the workflow for provisioning and publishing scenario:
+There are three main services in open publishing:
+
+1. Build, responsible for provisioning, transform user's content into output, push to delivery service and notify user.
+2. Delivery, responsible for storage of content.
+3. Rendering, responsible for render output into final HTML page.
+
+And below is the flow for provisioning and publishing scenario:
 
 Provisioning:
 
 1. Writer create a GIT repo.
 2. Writer calls build web service API to create an open publishing repository.
-3. Build service writes repo information in configuration DB and return success to user.
+3. Build service writes repo information in configuration DB.
+4. Build service calls delivery service to do necessary setup at delivery service side (like create delivery repo).
+5. Build return success to user.
 
 Publishing:
 
@@ -52,35 +60,33 @@ The first step of open publishing is to create a GIT repository and connect it t
 
 This step is called provisioning, which mainly contains two parts:
 1. Git repository must be created following the schema defined by open publishing.
-2. User must specify the GIT repository to be monitored by open publish through management portal or API.
+2. User must specify the GIT repository and necessary configuration through management portal or API.
 
 > The design principle here is to make GIT repository self-contained, which means all information including content, metadata and configuration can be stored in a central place.
 > So all publish operation can be done by manipulating GIT repo.
-> The only manual step which is outside GIT repo is done in #2.
+> But there will always be some configuration that is considered as "expensive" and cannot be done by manipulating GIT repo.
+> These configuration need to be specified in #2.
 
 ### 2.1 GIT Repository Layout
 
-Under a GIT repository, there will be multiple centers. A center is a group of documents that share the same configuration like template, base url, etc.
-Each center is a folder, under which there is a `center.json` that defines the basic properties of a center.
+Under a GIT repository, there will be multiple docsets. A docset is a group of documents that share the same configuration like template, base url, etc.
+Each docset is a folder, under which there is a `docset.json` that defines the basic properties of a docset.
 
-Under the root folder of a repository, there is a `siteCatalog.json` that defines all centers in this repo and some repo-level metadata.
+Under the root folder of a repository, there is a `siteCatalog.json` that defines all docsets in this repo.
 
-> The design principle is to put metadata at center level.
-> But because of the mapping between build and delivery service (one GIT repo maps to one repo in delivery service), there will be some metadata defined at repo level because they has to be defined at repo level in delivery service.
-
-> A center must be added to `siteCatalog.json` to be detected by open publishing.
+> A docset must be added to `siteCatalog.json` to be detected by open publishing.
 
 Here is a diagram that illustrates the structure of an open publishing GIT repo.
 
 ```
 /
 |- siteCatalog.json
-|- center1/
-|  |- center.json
+|- docset1/
+|  |- docset.json
 |  |- a.md
 |  \- b.md
-\- center2/
-   |- center.json
+\- docset2/
+   |- docset.json
    |- c.md
    \- d.md
 ```
@@ -90,27 +96,28 @@ Here is a diagram that illustrates the structure of an open publishing GIT repo.
 After a GIT repository is created, user must manually configure it to be monitored by open publishing.
 This can be done through open publishing management portal or API.
 
-Center must be added to the monitor list manually, open publishing won't monitor center creation/deletion and automatically provision them. Center creation is supposed to be a "heavy" operation so it need to be configured manually.
+Docset must be added to the monitor list manually, open publishing won't monitor docset creation/deletion and automatically provision them.
+Docset creation is supposed to be a "heavy" operation so it need to be configured manually.
 
-After this step, for all changes in a monitored center, open publishing will automatically build it and publish the content to MSDN web site.
+After this step, for all changes in a monitored docset, open publishing will automatically build it and publish the content to MSDN web site.
 
 3. Build
 --------
 
-### 3.1 Center Schema and File Format
+### 3.1 Docset Schema and File Format
 
-A center contains the following files:
+A docset contains the following files:
 
-1. `center.json`, which defines the basic properties of a center
-2. Document source files, currently we only support markdown file, but we're open to support more formats (e.g., HTML, ReST) in future
-3. `toc.md` that describes the TOC of the center.
+1. `docset.json`, which defines the basic properties of a docset.
+2. Document source files, currently we only support markdown file, but we're open to support more formats (e.g., HTML, ReST) in future.
+3. `toc.md` that describes the TOC of the docset.
 4. Support files, which are used by document source files, e.g., image, video, etc.
 
-Here is a diagram that illustrates the structure of a center:
+Here is a diagram that illustrates the structure of a docset:
 
 ```
-/center
-|- center.json
+/docset
+|- docset.json
 |- toc.md
 |- docs/
 |  |- get-started.md
@@ -141,7 +148,7 @@ body of the content...
 
 #### 3.1.2 toc.md
 
-`toc.md` is used to define the TOC (table of contents) structure of a center.
+`toc.md` is used to define the TOC (table of contents) structure of a docset.
 
 We uses [headers](http://daringfireball.net/projects/markdown/syntax#header) to specify the level of toc. For example:
 
@@ -154,7 +161,7 @@ We uses [headers](http://daringfireball.net/projects/markdown/syntax#header) to 
 
 The above example illustrates a parent topic "Tutorial" with three children Step 1-3.
 
-We employ the standard Markdown [link](http://daringfireball.net/projects/markdown/syntax#link) syntax to specify the target topic of the toc node. For example:
+We use standard Markdown [link](http://daringfireball.net/projects/markdown/syntax#link) syntax to specify the target topic of the toc node. For example:
 
 ```markdown
 # [Tutorial](tutorial.md)
@@ -164,10 +171,11 @@ We employ the standard Markdown [link](http://daringfireball.net/projects/markdo
 ```
 
 If a toc node is not a link, it will become a container node (can contain children but cannot be clicked).
+TOC node can also be an external link (for example, `www.bing.com`).
 
-> Since markdown only support 6 levels of header, we'll only support 6 levels of TOC for now.
+> Since markdown only support 6 levels of header, we'll only support 6 levels of TOC for now. This can be exteneded in future.
 
-> `toc.md` cannot contain arbitrary markdown content. All content which are not headers will generate build error.
+> `toc.md` cannot contain arbitrary markdown content. For example, you cannot have images in it. All content that are not headers will lead to build error.
 
 ### 3.2 Work with GIT Branch
 
@@ -187,6 +195,13 @@ Content in other branches will still be published, but only in internal MSDN sit
 
 Live branch can also be used to store branch related configuration. For example, if we want to have a configuration about which branches will be published (other branches will only be validated, as publish may be an "expensive" operation), this configuration can be stored in live branch.
 
+#### 3.2.2 New Feature Dogfooding using Branches
+
+It'll use a common case that user wants to try new features (like a new markdown extension) in his working branch while keep live branch using stable features.
+We're going to support this by allow user to specify the build toolset they want to use (in GIT repo).
+We'll release multiple versions of our build tool and let user to choose which one they want to use.
+After they test the feature in working branch, they can merge the content to live branch then live branch will also upgrade to use the new build tool.
+
 ### 3.3 Monitor GIT Repository Changes
 
 Open publishing will monitor changes in GIT repository and automatically build and publish changes. We'll leverage webhook provided by GIT server to get notified when there is an event happened on GIT repo.
@@ -198,6 +213,13 @@ Open publishing will monitor changes in GIT repository and automatically build a
 Both github and Visual Studio Online provides webhook ([github](https://developer.github.com/webhooks/), [VSO](https://www.visualstudio.com/get-started/integrate/service-hooks/webhooks-and-vso-vs)) to get notification on repo changes.
 
 > In case webhook is not reliable (VSO webhook has known reliablity issue), polling is always an alternative solution.
+
+For one repo, all changes will be built sequentially. There're two ways to build GIT changes:
+
+1. For each changes in GIT repo, start a build.
+2. Rolling build, aggregate all changes since last build and build them.
+
+\#2 may be more efficient but #1 will be more accurate. For now we will use #1 to build changes.
 
 ### 3.4 Transform Markdown Files
 
@@ -263,14 +285,14 @@ The following GIT operations should be interpreted correctly to have an efficien
 
 #### 3.6.4 Diff TOC Change
 
-*// Big topic, to be written later*
+*// Still pending on how TOC will be implemented at delivery service*
 
 ### 3.7 Integrate with Delivery Service
 
 Delivery service will provide REST API to push build output. When talking with delivery service, we will use path to uniquely identifies a file.
 As described in preview section, if path of a file changes, delivery service will treat it as a new file.
 
-Delivery serivce has a concept of repository, which maps to a GIT repository at build side. Under a repo, there can be multiple TOCs, which maps to TOCs under different centers in GIT repo.
+Delivery serivce has a concept of repository, which maps to docset at build side.
 
 Delivery service also has the concept of branch for a repo, which maps to the GIT branch at build side.
 
@@ -292,7 +314,7 @@ So there has to be a way to notify user when publish is completed (or failed).
 The most basic notification functionality we will provide is publish status API.
 User can use the last commit hash to call publish status API to get the pulbish status (succeeded, failed, processing) and publish report.
 
-We can also consider to support query publish status using the following crtiteria:
+We can also consider to support query publish status using the following criteria:
 1. Branch
 2. Tag
 3. GIT Revision range (01234567..89abcdef)
@@ -309,7 +331,7 @@ Besides query API, we will also provide push functionality to let users be notif
 ----------------------------
 
 As described in previous section, user will mainly interact with open publishing through GIT repo.
-For example, to publish, user just need to do a GIT push. To configure a center, user just update the configuration file in GIT repo.
+For example, to publish, user just need to do a GIT push. To configure a docset, user just update the configuration file in GIT repo.
 
 But there're still some operations that need to be done outside GIT repo, like provision a repo, and as described in previous section, query a build.
 
@@ -318,7 +340,7 @@ All these operations can be done through open publishing API.
 Open publishing API will be mainly supports the following operations:
 
 1. Create a repo. Given a GIT repo url, creates a corresponding "repo" in open publishing.
-2. Configure center watchlist. Given an open publishing repo, add/remove centers to be watched by open publishing.
+2. Configure docset watchlist. Given an open publishing repo, add/remove docsets to be watched by open publishing.
 3. Triggers a publish. Though a publish can be triggered by GIT push, there will be some cases that user wants to publish manually.
 This API provides this functionality. The input parameters could be:
    - Branch
