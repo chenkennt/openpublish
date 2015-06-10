@@ -44,6 +44,7 @@ Publishing:
 9. (Alternative) Writer can also call build web service to query publish status.
 10. Writer sees his content on MSDN web site (through rendering service).
 
+
 2. Provisioning
 ---------------
 
