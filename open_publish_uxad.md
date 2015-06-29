@@ -148,7 +148,8 @@ If there is no error, pull request can be merged.
 The difference between GitHub and VSO are:
 
 1. VSO will block merge if build failed, meaning that you cannot click "Complete pull request" button, while GitHub will not.
-2. "Details" link will brings you to the VSO build portal, while on GitHub it will brings you to the open publishing portal, where you can see a more friendly report status and report.
+2. GitHub will have a more descriptive message on the merge dialog and a "Details" link that brings you to the open publishing portal, where you can see a friendly report status and report.
+While on VSO, there is no such message and "Details" link will brings you to the VSO build portal.
 
 
 2. Design
