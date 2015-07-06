@@ -1,10 +1,6 @@
 Open Publishing: User Experience and Design
 ===========================================
 
-0. Overview
------------
-
-
 1. Scenarios
 ------------
 
@@ -137,7 +133,7 @@ On VSO, you will see a build is in progress. At this time, you cannot merge the 
 
 ![build in progress](build_in_progress.png)
 
-After build is completed, if there is errors, pull request cannot be merged.
+After build is completed, if there are errors, pull request cannot be merged.
 
 ![build rejected](build_rejected.png)
 
@@ -155,6 +151,22 @@ While on VSO, there is no such message and "Details" link will brings you to the
 2. Design
 ---------
 
+### 2.1 Overall Design
+
+Here is an overall architecture diagram of open publishing system:
+
+![op design](op_design.png)
+
+1. Writer commits a change to local GIT repo and push to remote.
+2. GIT server calls build web service to start a build through web hook or VSO build.
+3. Build web service dispatches the build request to build worker.
+4. Build worker pulls changes from GIT repo and read previous build output from storage to do an incremental build.
+5. Build worker saves build output and build report to storage.
+6. Build worker publishes the content to MSDN web site.
+7. Build worker sends notification to writer about completion of publish.
+8. (Alternative) Writer can also call build web service to query publish status.
+9. Writer sees his content on MSDN web site (through rendering service).
+
 ### 2.1 Authorization
 
 We'll use OAuth to authorize open publishing as an application to access GIT resources.
@@ -162,9 +174,35 @@ OAuth is supported on both [GitHub](https://developer.github.com/v3/oauth/) and 
 
 User will be asked to grant open publishing permission when do the provisioning.
 
-### 2.2 Monitor GIT Events (Push, Branch, Pull Request)
+### 2.2 Integrate with GIT Events (Push, Branch, Pull Request)
 
-For event like push and branch, we will use webhook ([github](https://developer.github.com/webhooks/), [VSO](https://www.visualstudio.com/get-started/integrate/service-hooks/webhooks-and-vso-vs)) to get notification on repo changes.
+For general events like push and branch, we will use webhook ([github](https://developer.github.com/webhooks/), [VSO](https://www.visualstudio.com/get-started/integrate/service-hooks/webhooks-and-vso-vs)) to get notification on repo changes.
 
-For pull request, we will use [branch policy](https://msdn.microsoft.com/Library/vs/alm/Code/git/branch-policies) for VSO to block pull request merge when build failed.
-For GitHub, we'll use [status API](https://developer.github.com/v3/repos/statuses/) to provide UI indication about whether a PR can be merged.
+### 2.2.1 Visual Studio Online
+
+For VSO, we will integrate with VSO build. VSO build provides the following functionalities:
+
+1. Triggers build when code is pushed to GIT repo
+2. Triggers build when a PR is created and block PR merge if build failed (through [branch policy](https://msdn.microsoft.com/Library/vs/alm/Code/git/branch-policies)).
+
+So the integration model between VSO and open publishing will be:
+
+1. Open publishing provides APIs to trigger a build and query the status of a build.
+2. For a GIT repo, a VSO build definition is setup outside open publishing, to monitor events on GIT repo and call open publishing to start build.
+3. The VSO build definition will do the following:
+   * Call open publishing API to start a build.
+   * Wait until build is finished.
+   * Call status API to get the build status.
+   * Decide whether to block PR merge based on the build status.
+
+### 2.2.1 GitHub
+
+For GitHub, VSO doesn't provide enough support especially on pull request. So open publishing will integrate with GitHub through webhook.
+
+The integration flow will be:
+
+1. Open publishing subscribes GIT event through webhook.
+2. GitHub calls open publishing API when there is push or pull request.
+3. Open publishing starts build to validate and publish content.
+4. Open publishing sends notification about build status to user (e.g. through email).
+5. For pull request, use [status API](https://developer.github.com/v3/repos/statuses/) to provide UI indication about whether the PR can be merged.
